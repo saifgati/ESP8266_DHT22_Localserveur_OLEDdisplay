@@ -1,0 +1,385 @@
+ const int refresh=3;//3 seconds
+ 
+ #include <ESP8266WiFi.h>
+ //debut
+ #include <WiFiClient.h>
+ #include <ESP8266WebServer.h>
+ #include <ESP8266mDNS.h>
+
+ #ifndef STASSID
+ #define STASSID "****" // Your WiFi SSID
+ #define STAPSK  "****" //Your WiFi password
+ #endif
+
+
+//fin
+ String result;
+ float hValue = 111;
+ float tValue = 222;
+
+ #include "DHT.h"
+ #define DHTPIN 5  
+ #define DHTTYPE DHT22
+ // Include the correct display library
+ // For a connection via I2C using Wire include
+ #include <Wire.h>  // Only needed for Arduino 1.6.5 and earlier
+ #include "SSD1306.h" // alias for `#include "SSD1306Wire.h"`
+ // or #include "SH1106.h" alis for `#include "SH1106Wire.h"`
+ // For a connection via I2C using brzo_i2c (must be installed) include
+ // #include <brzo_i2c.h> // Only needed for Arduino 1.6.5 and earlier
+ // #include "SSD1306Brzo.h"
+ // #include "SH1106Brzo.h"
+ // For a connection via SPI include
+ // #include <SPI.h> // Only needed for Arduino 1.6.5 and earlier
+ // #include "SSD1306Spi.h"
+ // #include "SH1106SPi.h"
+ DHT dht(DHTPIN, DHTTYPE);
+ // Use the corresponding display class:
+
+ // Initialize the OLED display using SPI
+ // D5 -> CLK
+ // D7 -> MOSI (DOUT)
+ // D0 -> RES
+ // D2 -> DC
+ // D8 -> CS
+ // SSD1306Spi        display(D0, D2, D8);
+ // or
+ // SH1106Spi         display(D0, D2);
+
+ // Initialize the OLED display using brzo_i2c
+ // D3 -> SDA
+ // D5 -> SCL
+ // SSD1306Brzo display(0x3c, D3, D5);
+ // or
+ // SH1106Brzo  display(0x3c, D3, D5);
+
+ // Initialize the OLED display using Wire library
+ SSD1306  display(0x3C, D3, D5);
+ // SH1106 display(0x3c, D3, D5);
+ const char* ssid = STASSID;
+ const char* password = STAPSK;
+
+ ESP8266WebServer server(80);
+// Adapted from Adafruit_SSD1306
+///////////////////////////////////////////////////////////
+void sendTemp() {
+
+  String page = "<!DOCTYPE html>";
+  page +="    <meta http-equiv='refresh' content='";
+  page += String(refresh);// how often temperature is read
+  page +="'/>";  
+  page +="<html>";
+  page +="<body>"; 
+  page +="<h1>MODULE ESP GPS</h1>";    
+  page +="<p style=\"font-size:50px;\">Temperature<br/>";  
+  page +="<p style=\"color:red; font-size:50px;\">";
+  page += String(tValue, 2);
+  page +="<p style=\"font-size:50px;\">Humidity<br/>";  
+  page +="<p style=\"color:green; font-size:50px;\">";
+  page += String(hValue, 2);
+  page +="</p>";  
+  page +="</body>";  
+  page +="</html>";  
+ server.send(200,  "text/html",page);
+
+}
+void handleNotFound() {
+ 
+  String message = "File Not Found";
+  message += "URI: ";
+  message += server.uri();
+  message += "Method: ";
+  message += (server.method() == HTTP_GET) ? "GET" : "POST";
+  message += "Arguments: ";
+  message += server.args();
+  message += "";
+  for (uint8_t i = 0; i < server.args(); i++) { message += " " + server.argName(i) + ": " + server.arg(i) + ""; }
+  server.send(404, "text/plain", message);
+
+}
+///////////////////////////////////////////////////////////
+void drawLines() {
+  for (int16_t i=0; i<DISPLAY_WIDTH; i+=4) {
+    display.drawLine(0, 0, i, DISPLAY_HEIGHT-1);
+    display.display();
+    delay(10);
+  }
+  for (int16_t i=0; i<DISPLAY_HEIGHT; i+=4) {
+    display.drawLine(0, 0, DISPLAY_WIDTH-1, i);
+    display.display();
+    delay(10);
+  }
+  delay(250);
+
+  display.clear();
+  for (int16_t i=0; i<DISPLAY_WIDTH; i+=4) {
+    display.drawLine(0, DISPLAY_HEIGHT-1, i, 0);
+    display.display();
+    delay(10);
+  }
+  for (int16_t i=DISPLAY_HEIGHT-1; i>=0; i-=4) {
+    display.drawLine(0, DISPLAY_HEIGHT-1, DISPLAY_WIDTH-1, i);
+    display.display();
+    delay(10);
+  }
+  delay(250);
+
+  display.clear();
+  for (int16_t i=DISPLAY_WIDTH-1; i>=0; i-=4) {
+    display.drawLine(DISPLAY_WIDTH-1, DISPLAY_HEIGHT-1, i, 0);
+    display.display();
+    delay(10);
+  }
+  for (int16_t i=DISPLAY_HEIGHT-1; i>=0; i-=4) {
+    display.drawLine(DISPLAY_WIDTH-1, DISPLAY_HEIGHT-1, 0, i);
+    display.display();
+    delay(10);
+  }
+  delay(250);
+  display.clear();
+  for (int16_t i=0; i<DISPLAY_HEIGHT; i+=4) {
+    display.drawLine(DISPLAY_WIDTH-1, 0, 0, i);
+    display.display();
+    delay(10);
+  }
+  for (int16_t i=0; i<DISPLAY_WIDTH; i+=4) {
+    display.drawLine(DISPLAY_WIDTH-1, 0, i, DISPLAY_HEIGHT-1);
+    display.display();
+    delay(10);
+  }
+  delay(250);
+}
+
+// Adapted from Adafruit_SSD1306
+void drawRect(void) {
+  for (int16_t i=0; i<DISPLAY_HEIGHT/2; i+=2) {
+    display.drawRect(i, i, DISPLAY_WIDTH-2*i, DISPLAY_HEIGHT-2*i);
+    display.display();
+    delay(10);
+  }
+}
+
+// Adapted from Adafruit_SSD1306
+void fillRect(void) {
+  uint8_t color = 1;
+  for (int16_t i=0; i<DISPLAY_HEIGHT/2; i+=3) {
+    display.setColor((color % 2 == 0) ? BLACK : WHITE); // alternate colors
+    display.fillRect(i, i, DISPLAY_WIDTH - i*2, DISPLAY_HEIGHT - i*2);
+    display.display();
+    delay(10);
+    color++;
+  }
+  // Reset back to WHITE
+  display.setColor(WHITE);
+}
+
+void printBuffer0(void){
+  display.setLogBuffer(1, 15);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.setFont(ArialMT_Plain_24);
+  display.drawString(26, 20, "Welcome");
+  display.display();
+}
+void printBuffer1(void) {
+  // Initialize the log buffer
+  // allocate memory to store 8 lines of text and 30 chars per line.
+  display.setLogBuffer(2, 30);
+  display.setFont(ArialMT_Plain_10);
+  Serial.begin(115200);
+ 
+  while(1) { 
+ 
+  Serial.println("Serial test");
+  dht.begin();
+  delay(500);
+  // Reading temperature or humidity takes about 250 milliseconds!
+  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
+   hValue = dht.readHumidity();
+   tValue = dht.readTemperature();
+   delay(100);
+  // print out the value you read:
+    String Hu=" %\t";
+    String Tc=" *C";
+    Serial.print("Humidity: "); 
+    Serial.print(hValue+Hu);
+  
+    Serial.print("Temperature: "); 
+    Serial.println(tValue+Tc);
+    
+
+  delay(1);
+
+  for (uint8_t i = 0; i < 11; i++) {
+    display.clear();
+    // Print to the screen
+
+    display.print("Humidity: ");
+    display.print(hValue);
+    display.println(" %\t");
+    display.print("Temperature: "); 
+    display.print(tValue);
+    display.println(" *C");
+
+
+    
+    // Draw it to the internal screen buffer
+    display.drawLogBuffer(0, 0);
+    // Display it on the screen
+    display.display();
+    delay(50);
+  }
+  }
+}
+
+////////////////////////////////////**
+void printBuffer2(void){
+  ///
+  display.setLogBuffer(2, 30);
+  display.setFont(ArialMT_Plain_10);
+  
+  dht.begin();
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.println("");
+
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+    
+  }
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    uint8_t macAddr[6];
+    WiFi.macAddress(macAddr);
+    Serial.printf("Connected, mac address: %02x:%02x:%02x:%02x:%02x:%02x", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
+   
+  }  
+  for (uint8_t i = 0; i < 11; i++) {
+  display.clear();
+  Serial.println("");
+  Serial.print("Connected to ");
+  display.print("Connected to ");
+  Serial.println(ssid);
+  display.print(ssid);
+  Serial.print("IP address: ");
+  display.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+
+  if (MDNS.begin("PFE Loading")) {
+    Serial.println("MDNS responder started");
+    display.print("MDNS responder started");
+    delay(500);
+  }
+
+  server.on("/", sendTemp);
+
+  server.on("/inline", []() {
+    server.send(200, "text/plain", "this works as well");
+  });
+
+  server.onNotFound(handleNotFound);
+
+  server.begin();
+  Serial.println("HTTP server started");
+  display.print("HTTP server started");
+  delay(500);
+  ///
+  display.drawLogBuffer(0, 0);
+
+  display.display();
+  delay(500);
+  }
+}
+/////////////////////////////////////**
+
+void setup(void) {
+
+////////////////////////////////////////////////
+  dht.begin();
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+
+
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+   
+  }
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    uint8_t macAddr[6];
+    WiFi.macAddress(macAddr);
+    
+  }  
+
+  if (MDNS.begin("robojaxDHT")) {
+    Serial.println("MDNS responder started");
+  }
+
+  server.on("/", sendTemp);
+
+  server.on("/inline", []() {
+    server.send(200, "text/plain", "this works as well");
+  });
+
+  server.onNotFound(handleNotFound);
+
+  server.begin();
+  
+
+///////////////////////////////////////////////
+  display.init();
+
+  // display.flipScreenVertically();
+
+  display.setContrast(255);
+
+  printBuffer0();
+  delay(3000);
+  display.clear();
+  
+  drawRect();
+  delay(1000);
+  display.clear();
+
+  fillRect();
+  delay(1000);
+  display.clear();
+  
+  printBuffer2();
+  delay(5000);
+  display.clear();
+  
+  printBuffer1();
+  delay(1000);
+  display.clear();
+ 
+}
+
+void loop(void) {
+  server.handleClient();
+  MDNS.update();
+  float c = dht.readTemperature();// Read temperature as Celsius (the default)
+  float h = dht.readHumidity();// Reading humidity 
+  float f = dht.readTemperature(true);// Read temperature as Fahrenheit (isFahrenheit = true)
+    Serial.println(c);
+ tValue =c;
+  delay(300);// change this to larger value (1000 or more) if you don't need very often reading
+  
+  Serial.println(h);
+ hValue =h;
+  delay(300);
+   }
+
+
+
+
+
+
+
+
+   
